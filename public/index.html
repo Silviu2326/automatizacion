@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Prompt Server - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.online {
+            background: #10b981;
+        }
+
+        .status-indicator.offline {
+            background: #ef4444;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        textarea, input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .prompt-item {
+            background: #f9fafb;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .prompt-item button {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .prompt-item button:hover {
+            background: #dc2626;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .job-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .job-item {
+            background: #f9fafb;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .job-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .job-item.completed {
+            border-left-color: #10b981;
+        }
+
+        .job-item.processing {
+            border-left-color: #f59e0b;
+        }
+
+        .job-item.failed {
+            border-left-color: #ef4444;
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .job-id {
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #6b7280;
+        }
+
+        .job-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .job-status.pending {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .job-status.processing {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .job-status.completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .job-progress {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #6b7280;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+        }
+
+        .job-details {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+            display: none;
+        }
+
+        .job-details.show {
+            display: block;
+        }
+
+        .result-item {
+            background: white;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #10b981;
+        }
+
+        .result-item.failed {
+            border-left-color: #ef4444;
+        }
+
+        .result-prompt {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .result-output {
+            color: #6b7280;
+            font-size: 0.9em;
+            margin-top: 8px;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .alert.success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .alert.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+
+        .alert.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f4f6;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Gemini Prompt Server</h1>
+            <p>
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Conectando...</span>
+            </p>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <!-- Gestión de Proyectos -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">📁 Proyectos</h2>
+                <button class="btn" onclick="showCreateProjectModal()" style="width: auto; padding: 8px 16px; font-size: 14px;">
+                    + Nuevo Proyecto
+                </button>
+            </div>
+            <div id="projectsList">
+                <p style="color: #6b7280; text-align: center; padding: 20px;">Cargando proyectos...</p>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Formulario para enviar prompts -->
+            <div class="card">
+                <h2>📝 Nuevos Prompts</h2>
+                <form id="promptForm">
+                    <div class="form-group">
+                        <label for="projectSelect">Proyecto (opcional):</label>
+                        <select id="projectSelect" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 14px; background: white;">
+                            <option value="">Sin proyecto (ejecutar en raíz)</option>
+                        </select>
+                        <small style="color: #6b7280; font-size: 0.85em;">
+                            Selecciona un proyecto para ejecutar los prompts en su directorio
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="webhookUrl">Webhook URL (opcional):</label>
+                        <input type="url" id="webhookUrl" placeholder="https://webhook.site/tu-url-unica">
+                        <small style="color: #6b7280; font-size: 0.85em;">
+                            Déjalo vacío para solo ver los resultados aquí
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="jsonFileInput">📄 Subir prompts desde JSON (opcional):</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="file" id="jsonFileInput" accept=".json" style="flex: 1; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
+                            <button type="button" onclick="clearJsonFile()" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; white-space: nowrap;">
+                                Limpiar
+                            </button>
+                        </div>
+                        <small style="color: #6b7280; font-size: 0.85em;">
+                            Formato esperado: <code>{"prompts": ["prompt1", "prompt2", ...]}</code>
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="prompts">Prompts (uno por línea):</label>
+                        <textarea id="prompts" placeholder="Escribe tus prompts aquí, uno por línea...&#10;&#10;Ejemplo:&#10;Explica qué es Node.js&#10;¿Qué es Express.js?&#10;Menciona 3 características de TypeScript" required></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" id="submitBtn">
+                        Enviar Prompts
+                    </button>
+                </form>
+
+                <div id="currentPrompts" style="margin-top: 20px;">
+                    <h3 style="font-size: 1.1em; margin-bottom: 10px;">Prompts en el formulario:</h3>
+                    <div id="promptList"></div>
+                </div>
+            </div>
+
+            <!-- Lista de jobs -->
+            <div class="card">
+                <h2>📊 Jobs en Progreso</h2>
+                <div class="job-list" id="jobList">
+                    <p style="color: #6b7280; text-align: center; padding: 20px;">
+                        No hay jobs activos
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin + '/api';
+        let jobs = {};
+        let projects = [];
+        let refreshInterval = null;
+
+        // Verificar estado del servidor
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                
+                const indicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                
+                if (data.status === 'ok') {
+                    indicator.className = 'status-indicator online';
+                    const geminiStatus = data.gemini.available ? '✅ Gemini CLI disponible' : '⚠️ Gemini CLI no disponible';
+                    statusText.textContent = `Servidor online - ${geminiStatus}`;
+                } else {
+                    indicator.className = 'status-indicator offline';
+                    statusText.textContent = 'Servidor offline';
+                }
+            } catch (error) {
+                const indicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                indicator.className = 'status-indicator offline';
+                statusText.textContent = 'No se puede conectar al servidor';
+            }
+        }
+
+        // Mostrar alerta
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert ${type}`;
+            alert.textContent = message;
+            container.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        // Cargar prompts desde archivo JSON
+        function loadPromptsFromJson(file) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const jsonContent = JSON.parse(e.target.result);
+                    
+                    // Verificar que tenga la estructura esperada
+                    if (!jsonContent.prompts || !Array.isArray(jsonContent.prompts)) {
+                        showAlert('Error: El JSON debe tener un array "prompts"', 'error');
+                        return;
+                    }
+                    
+                    if (jsonContent.prompts.length === 0) {
+                        showAlert('El archivo JSON no contiene prompts', 'error');
+                        return;
+                    }
+                    
+                    // Obtener prompts existentes en el textarea
+                    const textarea = document.getElementById('prompts');
+                    const existingPrompts = textarea.value.split('\n').filter(line => line.trim());
+                    
+                    // Combinar prompts existentes con los nuevos (evitar duplicados)
+                    const newPrompts = jsonContent.prompts.filter(p => 
+                        !existingPrompts.includes(p.trim())
+                    );
+                    
+                    // Agregar los nuevos prompts
+                    if (newPrompts.length > 0) {
+                        const allPrompts = [...existingPrompts, ...newPrompts];
+                        textarea.value = allPrompts.join('\n');
+                        updatePromptList();
+                        showAlert(`✅ ${newPrompts.length} prompt(s) cargado(s) desde el archivo JSON`, 'success');
+                    } else {
+                        showAlert('Todos los prompts del archivo ya están en el formulario', 'info');
+                    }
+                } catch (error) {
+                    showAlert(`Error al leer el archivo JSON: ${error.message}`, 'error');
+                    console.error('Error parsing JSON:', error);
+                }
+            };
+            
+            reader.onerror = function() {
+                showAlert('Error al leer el archivo', 'error');
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // Limpiar archivo JSON seleccionado
+        window.clearJsonFile = function() {
+            const fileInput = document.getElementById('jsonFileInput');
+            fileInput.value = '';
+        }
+
+        // Actualizar lista de prompts en el formulario
+        function updatePromptList() {
+            const textarea = document.getElementById('prompts');
+            const promptList = document.getElementById('promptList');
+            const lines = textarea.value.split('\n').filter(line => line.trim());
+            
+            if (lines.length === 0) {
+                promptList.innerHTML = '<p style="color: #6b7280;">No hay prompts</p>';
+                return;
+            }
+            
+            promptList.innerHTML = lines.map((line, index) => `
+                <div class="prompt-item">
+                    <span>${index + 1}. ${line.substring(0, 60)}${line.length > 60 ? '...' : ''}</span>
+                    <button onclick="removePrompt(${index})">Eliminar</button>
+                </div>
+            `).join('');
+        }
+
+        // Eliminar prompt
+        window.removePrompt = function(index) {
+            const textarea = document.getElementById('prompts');
+            const lines = textarea.value.split('\n').filter(line => line.trim());
+            lines.splice(index, 1);
+            textarea.value = lines.join('\n');
+            updatePromptList();
+        }
+
+        // Cargar proyectos
+        async function loadProjects() {
+            try {
+                const response = await fetch(`${API_URL}/projects`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    projects = data.projects || [];
+                    renderProjects();
+                    updateProjectSelect();
+                }
+            } catch (error) {
+                console.error('Error cargando proyectos:', error);
+                document.getElementById('projectsList').innerHTML = '<p style="color: #ef4444;">Error al cargar proyectos</p>';
+            }
+        }
+
+        // Renderizar lista de proyectos
+        function renderProjects() {
+            const projectsList = document.getElementById('projectsList');
+            
+            if (projects.length === 0) {
+                projectsList.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">No hay proyectos. Crea uno nuevo para empezar.</p>';
+                return;
+            }
+
+            projectsList.innerHTML = projects.map(project => {
+                const hasGit = project.hasGitRepository || false;
+                const hasGithubUrl = project.githubUrl && project.githubUrl.trim().length > 0;
+                
+                return `
+                <div class="prompt-item" style="margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong>${project.name}</strong>
+                            ${hasGit ? '<span style="color: #10b981; font-size: 0.9em;" title="Repositorio clonado">✅ Git</span>' : ''}
+                        </div>
+                        ${project.description ? `<div style="color: #6b7280; font-size: 0.9em; margin-top: 4px;">${project.description}</div>` : ''}
+                        ${hasGithubUrl ? `<div style="margin-top: 4px;"><a href="${project.githubUrl}" target="_blank" style="color: #667eea; font-size: 0.85em; text-decoration: none;">🔗 ${project.githubUrl}</a></div>` : ''}
+                        <div style="color: #9ca3af; font-size: 0.85em; margin-top: 4px; font-family: monospace;">
+                            📁 ${project.directory.split(/[/\\]/).pop()}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        ${hasGithubUrl && !hasGit ? `
+                            <button onclick="cloneRepository('${project.id}')" style="background: #667eea; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;" title="Clonar repositorio">
+                                📥 Clonar
+                            </button>
+                        ` : ''}
+                        ${hasGit ? `
+                            <button onclick="pushToGitHub('${project.id}')" style="background: #10b981; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;" title="Subir cambios a GitHub">
+                                ⬆️ Subir cambios
+                            </button>
+                        ` : ''}
+                        <button onclick="deleteProject('${project.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                            Eliminar
+                        </button>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        // Actualizar selector de proyectos
+        function updateProjectSelect() {
+            const select = document.getElementById('projectSelect');
+            const currentValue = select.value;
+            
+            // Limpiar opciones existentes (excepto la primera)
+            select.innerHTML = '<option value="">Sin proyecto (ejecutar en raíz)</option>';
+            
+            // Añadir proyectos
+            projects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = `${project.name}${project.description ? ' - ' + project.description : ''}`;
+                select.appendChild(option);
+            });
+            
+            // Restaurar selección anterior si existe
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        }
+
+        // Mostrar modal para crear proyecto
+        window.showCreateProjectModal = function() {
+            const name = prompt('Nombre del proyecto:');
+            if (!name || name.trim().length === 0) {
+                return;
+            }
+            
+            const description = prompt('Descripción (opcional):') || '';
+            const githubUrl = prompt('URL de GitHub (opcional, ej: https://github.com/usuario/repo):') || '';
+            createProject(name.trim(), description.trim(), githubUrl.trim());
+        }
+
+        // Crear proyecto
+        async function createProject(name, description = '', githubUrl = '') {
+            try {
+                const body = { name, description };
+                if (githubUrl && githubUrl.trim().length > 0) {
+                    body.githubUrl = githubUrl.trim();
+                }
+                
+                const response = await fetch(`${API_URL}/projects`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`✅ Proyecto "${data.project.name}" creado exitosamente`, 'success');
+                    await loadProjects();
+                } else {
+                    showAlert(`Error: ${data.error || 'Error desconocido'}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Error al crear proyecto: ${error.message}`, 'error');
+            }
+        }
+
+        // Clonar repositorio
+        window.cloneRepository = async function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) {
+                showAlert('Proyecto no encontrado', 'error');
+                return;
+            }
+
+            if (!project.githubUrl || project.githubUrl.trim().length === 0) {
+                showAlert('Este proyecto no tiene una URL de GitHub configurada', 'error');
+                return;
+            }
+
+            if (project.hasGitRepository) {
+                showAlert('El repositorio ya está clonado en este proyecto', 'info');
+                return;
+            }
+
+            if (!confirm(`¿Clonar el repositorio ${project.githubUrl} en este proyecto?\n\nEsto puede tardar unos momentos dependiendo del tamaño del repositorio.`)) {
+                return;
+            }
+
+            try {
+                showAlert('Clonando repositorio, por favor espera... Esto puede tardar unos minutos.', 'info');
+                
+                const response = await fetch(`${API_URL}/projects/${projectId}/clone`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`✅ ${data.message}`, 'success');
+                    await loadProjects(); // Recargar para actualizar el estado
+                } else {
+                    showAlert(`Error: ${data.error || data.message || 'Error desconocido'}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Error al clonar repositorio: ${error.message}`, 'error');
+            }
+        };
+
+        // Subir cambios a GitHub
+        window.pushToGitHub = async function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) {
+                showAlert('Proyecto no encontrado', 'error');
+                return;
+            }
+
+            if (!project.hasGitRepository) {
+                showAlert('Este proyecto no tiene un repositorio git clonado', 'error');
+                return;
+            }
+
+            if (!project.githubUrl || project.githubUrl.trim().length === 0) {
+                showAlert('Este proyecto no tiene una URL de GitHub configurada', 'error');
+                return;
+            }
+
+            const commitMessage = prompt('Mensaje del commit (opcional):') || '';
+            
+            if (commitMessage === null) {
+                // El usuario canceló
+                return;
+            }
+
+            if (!confirm(`¿Subir los cambios del proyecto "${project.name}" a GitHub?\n\n${commitMessage ? `Mensaje del commit: "${commitMessage}"` : 'Se usará un mensaje automático'}`)) {
+                return;
+            }
+
+            try {
+                showAlert('Subiendo cambios a GitHub, por favor espera...', 'info');
+                
+                const body = {};
+                if (commitMessage && commitMessage.trim().length > 0) {
+                    body.commitMessage = commitMessage.trim();
+                }
+                
+                const response = await fetch(`${API_URL}/projects/${projectId}/push`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`✅ ${data.message}`, 'success');
+                } else {
+                    // Mostrar error con mejor formato, especialmente para errores de autenticación
+                    const errorMsg = data.error || data.message || 'Error desconocido';
+                    
+                    // Si el mensaje contiene información sobre configuración de Git, mostrarlo en múltiples líneas
+                    if (errorMsg.includes('Error de autenticación') || errorMsg.includes('Personal Access Token')) {
+                        // Crear un alert más detallado
+                        const alertContainer = document.getElementById('alertContainer');
+                        const alert = document.createElement('div');
+                        alert.className = 'alert error';
+                        alert.style.whiteSpace = 'pre-line'; // Permitir saltos de línea
+                        alert.textContent = errorMsg;
+                        alertContainer.appendChild(alert);
+                        
+                        setTimeout(() => {
+                            alert.remove();
+                        }, 15000); // Mostrar por más tiempo (15 segundos)
+                    } else {
+                        showAlert(`Error: ${errorMsg}`, 'error');
+                    }
+                }
+            } catch (error) {
+                showAlert(`Error al subir cambios: ${error.message}`, 'error');
+            }
+        };
+
+        // Eliminar proyecto
+        window.deleteProject = async function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+
+            if (!confirm(`¿Estás seguro de eliminar el proyecto "${project.name}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/projects/${projectId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`✅ Proyecto "${project.name}" eliminado`, 'success');
+                    await loadProjects();
+                } else {
+                    showAlert(`Error: ${data.error || 'Error desconocido'}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Error al eliminar proyecto: ${error.message}`, 'error');
+            }
+        }
+
+        // Enviar formulario
+        document.getElementById('promptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const projectId = document.getElementById('projectSelect').value.trim();
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            const promptsText = document.getElementById('prompts').value.trim();
+            
+            if (!promptsText) {
+                showAlert('Por favor, ingresa al menos un prompt', 'error');
+                return;
+            }
+            
+            const prompts = promptsText.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+            
+            if (prompts.length === 0) {
+                showAlert('Por favor, ingresa al menos un prompt válido', 'error');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span> Enviando...';
+            
+            try {
+                const body = {
+                    prompts: prompts
+                };
+                
+                // Solo añadir projectId si no está vacío
+                if (projectId && projectId.trim().length > 0) {
+                    body.projectId = projectId.trim();
+                }
+                
+                // Solo añadir webhookUrl si no está vacío
+                if (webhookUrl && webhookUrl.trim().length > 0) {
+                    body.webhookUrl = webhookUrl.trim();
+                }
+                
+                const response = await fetch(`${API_URL}/prompts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`✅ Job creado exitosamente! ID: ${data.jobId}`, 'success');
+                    document.getElementById('prompts').value = '';
+                    document.getElementById('promptList').innerHTML = '<p style="color: #6b7280;">No hay prompts</p>';
+                    
+                    // Añadir job a la lista
+                    await loadJob(data.jobId);
+                    refreshJobs();
+                } else {
+                    showAlert(`Error: ${data.error || 'Error desconocido'}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Error al enviar: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Enviar Prompts';
+            }
+        });
+
+        // Cargar job individual
+        async function loadJob(jobId) {
+            try {
+                const response = await fetch(`${API_URL}/jobs/${jobId}`);
+                const job = await response.json();
+                jobs[jobId] = job;
+                renderJobs();
+            } catch (error) {
+                console.error('Error cargando job:', error);
+            }
+        }
+
+        // Renderizar jobs
+        function renderJobs() {
+            const jobList = document.getElementById('jobList');
+            const jobIds = Object.keys(jobs);
+            
+            if (jobIds.length === 0) {
+                jobList.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">No hay jobs activos</p>';
+                return;
+            }
+            
+            // Ordenar por fecha (más recientes primero)
+            const sortedJobs = jobIds
+                .map(id => jobs[id])
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            
+            jobList.innerHTML = sortedJobs.map(job => {
+                const progress = job.total > 0 ? (job.completed / job.total) * 100 : 0;
+                const statusClass = job.status === 'completed' ? 'completed' : 
+                                   job.status === 'processing' ? 'processing' : 
+                                   job.status === 'pending' ? 'pending' : 'failed';
+                
+                const detailsHtml = job.results && job.results.length > 0 ? job.results.map(result => `
+                    <div class="result-item ${result.status === 'failed' ? 'failed' : ''}">
+                        <div class="result-prompt">${result.index + 1}. ${result.prompt.substring(0, 80)}${result.prompt.length > 80 ? '...' : ''}</div>
+                        <div class="result-status" style="font-size: 0.85em; color: ${result.status === 'completed' ? '#10b981' : '#ef4444'}; margin-top: 5px;">
+                            ${result.status === 'completed' ? '✅' : '❌'} ${result.status.toUpperCase()}
+                        </div>
+                        ${result.output ? `
+                            <div class="result-output">
+                                ${result.output.substring(0, 200)}${result.output.length > 200 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('') : '<p style="color: #6b7280;">Sin resultados aún</p>';
+                
+                return `
+                    <div class="job-item ${statusClass}" onclick="toggleJobDetails('${job.jobId}')">
+                        <div class="job-header">
+                            <div>
+                                <div class="job-id">${job.jobId.substring(0, 8)}...</div>
+                                <div style="margin-top: 5px; font-weight: 600;">${job.total} prompt${job.total !== 1 ? 's' : ''}</div>
+                                ${job.projectId ? `<div style="margin-top: 4px; font-size: 0.85em; color: #667eea;">📁 Proyecto: ${projects.find(p => p.id === job.projectId)?.name || job.projectId.substring(0, 8)}</div>` : ''}
+                            </div>
+                            <span class="job-status ${job.status}">${job.status.toUpperCase()}</span>
+                        </div>
+                        <div class="job-progress">
+                            Completados: ${job.completed}/${job.total} | Fallidos: ${job.failed}
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+                        <div class="job-details" id="details-${job.jobId}">
+                            <div style="margin-top: 10px;">
+                                <strong>Resultados:</strong>
+                                ${detailsHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Toggle detalles del job
+        window.toggleJobDetails = function(jobId) {
+            const details = document.getElementById(`details-${jobId}`);
+            details.classList.toggle('show');
+        }
+
+        // Refrescar jobs
+        async function refreshJobs() {
+            const jobIds = Object.keys(jobs);
+            
+            for (const jobId of jobIds) {
+                const job = jobs[jobId];
+                // Solo refrescar jobs que no estén completados
+                if (job.status !== 'completed') {
+                    await loadJob(jobId);
+                }
+            }
+        }
+
+        // Actualizar lista de prompts cuando cambia el textarea
+        document.getElementById('prompts').addEventListener('input', updatePromptList);
+
+        // Event listener para cargar archivo JSON
+        document.getElementById('jsonFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+                    showAlert('Error: El archivo debe ser un JSON (.json)', 'error');
+                    e.target.value = ''; // Limpiar selección
+                    return;
+                }
+                loadPromptsFromJson(file);
+            }
+        });
+
+        // Inicializar
+        checkServerStatus();
+        loadProjects(); // Cargar proyectos al iniciar
+        setInterval(checkServerStatus, 30000); // Verificar estado cada 30 segundos
+        
+        // Refrescar jobs cada 2 segundos
+        refreshInterval = setInterval(refreshJobs, 2000);
+        
+        // Limpiar interval al cerrar
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html>
+

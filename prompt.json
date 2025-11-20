@@ -1,0 +1,7 @@
+{
+  "prompts": [
+    "**20_Mejorar_Docs_CRM**: Lee `@docs/features/crm.md`. Tu tarea es expandir drásticamente su contenido técnico y funcional. **Debes añadir**: 1. Diagramas de flujo en Mermaid (ej: Flujo de 'Rotting Logic'). 2. Definición exacta de interfaces TypeScript para `Contact` y `Deal`. 3. Detalles de UX (comportamiento en móvil, tooltips, estados vacíos). 4. Lista de endpoints de API necesarios (ej: `GET /contacts`, `POST /deals`). Manten la estructura actual pero llénala de detalle técnico accionable.",
+    "**21_Mejorar_Docs_Marketing**: Lee `@docs/features/marketing.md`. Expande el contenido. **Debes añadir**: 1. Diagrama Mermaid del flujo de 'Email Drip'. 2. Estructura JSON para guardar una Landing Page. 3. Componentes UI necesarios (ej: `EmailEditor`, `LandingBuilder`). 4. Endpoints API. Define cómo se integrará con proveedores de email (SMTP/API).",
+    "**34_Mejorar_Docs_Growth**: Lee `@docs/features/growth.md`. Expande el contenido. **Debes añadir**: 1. Modelo de OKRs (Objectives and Key Results). 2. Gamificación (cálculo de XP por tareas completadas). 3. Visualización de progreso (gráficos de área)."
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "gemini-prompt-server",
+  "version": "1.0.0",
+  "description": "Servidor Node.js para ejecutar prompts con Gemini CLI y notificar resultados via webhooks",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "gemini",
+    "prompts",
+    "webhook",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.2"
+  }
+}
