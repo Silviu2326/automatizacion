@@ -69,12 +69,66 @@ git push -u origin main
 - Para crear un PAT: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
 - Permisos necesarios: `repo` (acceso completo a repositorios)
 
-## Paso 3: Clonar en la Máquina Virtual
+## Paso 3: Configurar la Máquina Virtual
 
-### 3.1. Conectarte a tu máquina virtual
-Usa SSH o el método que uses para acceder a tu máquina virtual.
+### 3.1. Recomendaciones de Configuración de la VM
 
-### 3.2. Instalar Git (si no está instalado)
+**Sistema Operativo:**
+- **Ubuntu 24.04 LTS (Noble Numbat)** - **RECOMENDADO** ⭐
+  - Versión más reciente LTS (soporte hasta 2029)
+  - Mejor rendimiento y seguridad
+  - Compatible con Node.js 18+
+  
+- **Ubuntu 22.04 LTS (Jammy Jellyfish)** - Alternativa
+  - Muy estable y probada
+  - Soporte hasta 2027
+  
+- **Versión:** Elige **"Ubuntu 24.04 Minimal"** o **"Ubuntu Server"** (sin interfaz gráfica)
+  - Solo línea de comandos (CLI)
+  - Menor consumo de recursos
+  - Ideal para servidores
+
+**Especificaciones Recomendadas:**
+- **RAM:** Mínimo 2 GB, recomendado 4 GB
+- **Disco:** Mínimo 20 GB, recomendado 100 GB (para proyectos y dependencias)
+- **CPU:** 1-2 vCPUs es suficiente para desarrollo
+- **Red:** IP pública o configuración de NAT para acceso externo
+
+**Configuración de Red:**
+- Asegúrate de que la VM tenga una **IP pública** o configura **port forwarding**
+- Si usas Google Cloud Platform, configura una **regla de firewall** para permitir tráfico HTTP/HTTPS en el puerto que uses (ej: 3000)
+
+### 3.2. Configuración de Redes en la Consola
+
+Al crear la VM, en la sección **"Redes"** (Networks), configura lo siguiente:
+
+**Firewall:**
+- ✅ **Marca "Permitir tráfico HTTP"** - Esto permite acceso desde Internet al puerto 80
+- ✅ **Marca "Permitir tráfico HTTPS"** - Esto permite acceso al puerto 443 (útil si más adelante usas SSL)
+- ⚠️ **Nota:** Estas reglas solo permiten puertos 80 y 443. Para el puerto 3000, necesitarás crear una regla personalizada después (ver sección 3.9)
+
+**Interfaces de red:**
+- Deja la configuración por defecto (nic0 con la red "default")
+- Asegúrate de que tenga **"IPv4"** habilitado
+- Si quieres una IP pública estática, puedes configurarla después en la sección de IPs externas
+
+**Otras opciones:**
+- **Etiquetas de red:** Déjalo vacío (opcional, para organización)
+- **Nombre de host:** Déjalo por defecto o pon un nombre personalizado (ej: `gemini-server`)
+- **Reenvío de IP:** No marques (solo si necesitas que la VM actúe como router)
+
+### 3.2. Conectarte a tu máquina virtual
+Usa SSH para acceder a tu máquina virtual:
+
+```bash
+# Ejemplo con Google Cloud Platform
+gcloud compute ssh NOMBRE_DE_LA_VM --zone=ZONA
+
+# O con SSH tradicional
+ssh usuario@IP_PUBLICA_DE_LA_VM
+```
+
+### 3.3. Instalar Git (si no está instalado)
 ```bash
 # En Ubuntu/Debian
 sudo apt update
@@ -84,13 +138,13 @@ sudo apt install git
 git --version
 ```
 
-### 3.3. Configurar Git en la máquina virtual
+### 3.4. Configurar Git en la máquina virtual
 ```bash
 git config --global user.name "Tu Nombre"
 git config --global user.email "tu@email.com"
 ```
 
-### 3.4. Clonar el repositorio
+### 3.5. Clonar el repositorio
 ```bash
 # Navegar al directorio donde quieres clonar (ej: ~/proyectos)
 cd ~/proyectos
@@ -105,7 +159,7 @@ git clone https://github.com/TU_USUARIO/TU_REPO.git
 cd TU_REPO
 ```
 
-### 3.5. Instalar dependencias
+### 3.6. Instalar dependencias
 ```bash
 # Instalar Node.js si no está instalado
 # En Ubuntu/Debian:
@@ -120,7 +174,7 @@ npm --version
 npm install
 ```
 
-### 3.6. Configurar variables de entorno
+### 3.7. Configurar variables de entorno
 ```bash
 # Crear archivo .env
 cp .env.example .env
@@ -146,17 +200,103 @@ GEMINI_MODEL=gemini-3-pro-preview
 - Si quieres usar un modelo específico como `gemini-3-pro-preview`, agrégalo al `.env`
 - El sistema siempre usa `--yolo` para ejecutar comandos y crear archivos
 
-### 3.7. Instalar Gemini CLI
+### 3.8. Instalar Gemini CLI
 ```bash
 npm install -g @google/gemini-cli
 ```
 
-### 3.8. Iniciar el servidor
+### 3.8. Configurar Firewall para Acceso Externo
+
+Para poder acceder al frontend desde tu máquina local, necesitas abrir el puerto en el firewall:
+
+**En Google Cloud Platform:**
+```bash
+# Crear regla de firewall para permitir tráfico HTTP en el puerto 3000
+gcloud compute firewall-rules create allow-gemini-server \
+    --allow tcp:3000 \
+    --source-ranges 0.0.0.0/0 \
+    --description "Permitir acceso al servidor Gemini Prompt"
+```
+
+**O desde la consola web de GCP:**
+1. Ve a **VPC network** → **Firewall**
+2. Clic en **Create Firewall Rule**
+3. Nombre: `allow-gemini-server`
+4. Direction: **Ingress**
+5. Targets: **All instances in the network**
+6. Source IP ranges: `0.0.0.0/0` (o tu IP específica para más seguridad)
+7. Protocols and ports: **TCP** → `3000`
+8. Crear
+
+**En otras plataformas (AWS, Azure, etc.):**
+- Configura las reglas de seguridad del grupo/NSG para permitir tráfico entrante en el puerto 3000 (o el que uses)
+
+### 3.9. Iniciar el servidor
+
 ```bash
 npm start
 ```
 
-El servidor estará disponible en `http://localhost:3000` (o el puerto que configuraste).
+El servidor estará disponible en:
+- **Localmente en la VM:** `http://localhost:3000`
+- **Desde tu máquina local:** `http://IP_PUBLICA_DE_LA_VM:3000`
+
+**Obtener la IP pública de tu VM:**
+```bash
+# En Google Cloud Platform
+gcloud compute instances describe NOMBRE_DE_LA_VM --zone=ZONA --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+
+# O desde la consola web de GCP, ve a Compute Engine → VM instances
+```
+
+### 3.10. Ejecutar el servidor en segundo plano (Opcional)
+
+Para que el servidor siga ejecutándose después de cerrar la sesión SSH:
+
+**Opción 1: Usar `nohup`**
+```bash
+nohup npm start > server.log 2>&1 &
+```
+
+**Opción 2: Usar `screen` o `tmux`**
+```bash
+# Instalar screen
+sudo apt install screen
+
+# Crear una sesión screen
+screen -S gemini-server
+
+# Iniciar el servidor
+npm start
+
+# Desconectar: Ctrl+A, luego D
+# Reconectar: screen -r gemini-server
+```
+
+**Opción 3: Usar PM2 (Recomendado para producción)**
+```bash
+# Instalar PM2 globalmente
+sudo npm install -g pm2
+
+# Iniciar el servidor con PM2
+pm2 start server.js --name gemini-server
+
+# Ver estado
+pm2 status
+
+# Ver logs
+pm2 logs gemini-server
+
+# Reiniciar
+pm2 restart gemini-server
+
+# Detener
+pm2 stop gemini-server
+
+# Configurar para iniciar automáticamente al reiniciar la VM
+pm2 startup
+pm2 save
+```
 
 ## Paso 4: Actualizar el Proyecto en la Máquina Virtual
 
