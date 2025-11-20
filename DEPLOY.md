@@ -131,11 +131,20 @@ nano .env
 vim .env
 ```
 
-Agrega tu `GEMINI_API_KEY`:
+Agrega tu configuración (mínimo `GEMINI_API_KEY`):
 ```env
 GEMINI_API_KEY=tu_clave_api_aqui
 PORT=3000
+
+# Opcional: Especificar modelo de Gemini
+# Si quieres usar gemini-3-pro-preview u otro modelo específico:
+GEMINI_MODEL=gemini-3-pro-preview
 ```
+
+**Nota sobre GEMINI_MODEL:**
+- Si no especificas `GEMINI_MODEL`, se usará el modelo por defecto de Gemini CLI
+- Si quieres usar un modelo específico como `gemini-3-pro-preview`, agrégalo al `.env`
+- El sistema siempre usa `--yolo` para ejecutar comandos y crear archivos
 
 ### 3.7. Instalar Gemini CLI
 ```bash

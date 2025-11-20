@@ -284,6 +284,7 @@ curl http://localhost:3000/api/jobs/550e8400-e29b-41d4-a716-446655440000
 |----------|-------------|-----------|---------|
 | `PORT` | Puerto del servidor | No | 3000 |
 | `GEMINI_API_KEY` | API Key de Gemini | Sí | - |
+| `GEMINI_MODEL` | Modelo de Gemini a usar (ej: `gemini-3-pro-preview`) | No | Modelo por defecto de Gemini CLI |
 | `NODE_ENV` | Entorno (development/production) | No | development |
 
 ## Solución de Problemas

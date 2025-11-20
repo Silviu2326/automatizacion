@@ -59,10 +59,23 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null) {
       console.log(`[Gemini] Ejecutando en directorio: ${projectDirectory}`);
     }
 
-    // Ejecutar el comando con el prompt como argumento separado
+    // Construir el comando con --yolo (necesario para ejecutar comandos)
+    // Si GEMINI_MODEL está configurado, usar ese modelo específico
+    let geminiCommand = 'gemini --yolo';
+    
+    // Agregar modelo si está configurado en variables de entorno
+    const geminiModel = env.GEMINI_MODEL;
+    if (geminiModel && geminiModel.trim().length > 0) {
+      geminiCommand += ` --model ${geminiModel.trim()}`;
+      console.log(`[Gemini] Usando modelo: ${geminiModel.trim()}`);
+    }
+    
+    geminiCommand += ` ${JSON.stringify(prompt)}`;
+    
+    // Ejecutar el comando con --yolo para que ejecute comandos y cree archivos
     // Esto evita problemas con caracteres especiales en el prompt
     const { stdout, stderr } = await execAsync(
-      `gemini --yolo ${JSON.stringify(prompt)}`,
+      geminiCommand,
       execOptions
     );
 
