@@ -1,6 +1,6 @@
 import express from 'express';
 import promptQueue from '../queue/promptQueue.js';
-import { verifyGeminiSetup } from '../services/gemini.js';
+import { verifyGeminiSetup, getApiKeyInfo } from '../services/gemini.js';
 import projectManager from '../services/projectManager.js';
 
 const router = express.Router();
@@ -154,13 +154,20 @@ router.get('/jobs/:jobId', (req, res) => {
 router.get('/health', async (req, res) => {
   try {
     const geminiStatus = await verifyGeminiSetup();
+    const apiKeyInfo = getApiKeyInfo();
 
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       gemini: {
         available: geminiStatus.available,
-        error: geminiStatus.error || undefined
+        error: geminiStatus.error || undefined,
+        apiKeys: {
+          total: apiKeyInfo.totalKeys,
+          currentIndex: apiKeyInfo.currentKeyIndex + 1, // 1-indexed para mostrar al usuario
+          hasMultipleKeys: apiKeyInfo.hasMultipleKeys,
+          rotationEnabled: apiKeyInfo.hasMultipleKeys
+        }
       }
     });
   } catch (error) {

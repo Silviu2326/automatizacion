@@ -161,14 +161,17 @@ cd TU_REPO
 
 ### 3.6. Instalar dependencias
 ```bash
-# Instalar Node.js si no está instalado
+# Instalar Node.js 20 (REQUERIDO para Gemini CLI)
 # En Ubuntu/Debian:
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# Verificar instalación
+# Verificar instalación (debe ser 20.x o superior)
 node --version
 npm --version
+
+# ⚠️ IMPORTANTE: Gemini CLI requiere Node.js 20+
+# Si tienes Node.js 18, actualiza antes de continuar
 
 # Instalar dependencias del proyecto
 npm install
@@ -185,19 +188,33 @@ nano .env
 vim .env
 ```
 
-Agrega tu configuración (mínimo `GEMINI_API_KEY`):
+Agrega tu configuración. Tienes dos opciones:
+
+**Opción 1: Una sola API Key (simple)**
 ```env
 GEMINI_API_KEY=tu_clave_api_aqui
 PORT=3000
-
-# Opcional: Especificar modelo de Gemini
-# Si quieres usar gemini-3-pro-preview u otro modelo específico:
 GEMINI_MODEL=gemini-3-pro-preview
 ```
 
-**Nota sobre GEMINI_MODEL:**
+**Opción 2: Múltiples API Keys (rotación automática) - RECOMENDADO**
+```env
+# Múltiples keys separadas por coma (sin espacios entre comas)
+GEMINI_API_KEYS=AIzaSyC-key1,AIzaSyC-key2,AIzaSyC-key3
+PORT=3000
+GEMINI_MODEL=gemini-3-pro-preview
+```
+
+**Ventajas de usar múltiples keys:**
+- ✅ Rotación automática cuando se alcanza un límite
+- ✅ El sistema detecta errores de cuota y cambia automáticamente
+- ✅ Mayor capacidad de procesamiento
+- ✅ Sin interrupciones si una key alcanza su límite
+
+**Notas:**
+- Si especificas `GEMINI_API_KEYS`, el sistema ignorará `GEMINI_API_KEY`
+- El sistema detecta automáticamente errores de límite y rota a la siguiente key
 - Si no especificas `GEMINI_MODEL`, se usará el modelo por defecto de Gemini CLI
-- Si quieres usar un modelo específico como `gemini-3-pro-preview`, agrégalo al `.env`
 - El sistema siempre usa `--yolo` para ejecutar comandos y crear archivos
 
 ### 3.8. Instalar Gemini CLI

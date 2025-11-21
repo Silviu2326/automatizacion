@@ -30,6 +30,10 @@ desktop.ini
 projects/
 !projects/.gitkeep
 
+# Jobs data directory
+data/
+!data/.gitkeep
+
 # Temporary files
 *.tmp
 *.temp

@@ -14,7 +14,7 @@ Servidor Node.js para ejecutar prompts con Gemini CLI y notificar resultados med
 
 ## Requisitos Previos
 
-1. **Node.js** (v18 o superior)
+1. **Node.js** (v20 o superior) ⚠️ **IMPORTANTE**: Gemini CLI requiere Node.js 20+
 2. **Gemini CLI** instalado globalmente:
    ```bash
    npm install -g @google/gemini-cli
@@ -283,9 +283,25 @@ curl http://localhost:3000/api/jobs/550e8400-e29b-41d4-a716-446655440000
 | Variable | Descripción | Requerido | Default |
 |----------|-------------|-----------|---------|
 | `PORT` | Puerto del servidor | No | 3000 |
-| `GEMINI_API_KEY` | API Key de Gemini | Sí | - |
+| `GEMINI_API_KEY` | API Key de Gemini (modo compatibilidad, una sola key) | Sí* | - |
+| `GEMINI_API_KEYS` | Múltiples API Keys separadas por coma (rotación automática) | Sí* | - |
 | `GEMINI_MODEL` | Modelo de Gemini a usar (ej: `gemini-3-pro-preview`) | No | Modelo por defecto de Gemini CLI |
 | `NODE_ENV` | Entorno (development/production) | No | development |
+
+\* Necesitas configurar **GEMINI_API_KEY** O **GEMINI_API_KEYS** (no ambos).
+
+### Rotación Automática de API Keys
+
+Si tienes múltiples API keys de Gemini, puedes configurar rotación automática para evitar límites:
+
+```env
+# En tu archivo .env
+GEMINI_API_KEYS=AIzaSyC-key1,AIzaSyC-key2,AIzaSyC-key3
+PORT=3000
+GEMINI_MODEL=gemini-3-pro-preview
+```
+
+El sistema detecta automáticamente cuando se alcanza un límite y rota a la siguiente key disponible.
 
 ## Solución de Problemas
 
@@ -303,6 +319,29 @@ Instala Gemini CLI globalmente:
 ```bash
 npm install -g @google/gemini-cli
 ```
+
+### Error: "SyntaxError: Invalid regular expression flags"
+
+Este error ocurre porque **Gemini CLI requiere Node.js 20+** pero estás usando una versión anterior.
+
+**Solución: Actualizar Node.js a versión 20+**
+
+```bash
+# Actualizar Node.js a versión 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verificar (debe mostrar 20.x o superior)
+node --version
+
+# Reinstalar Gemini CLI después de actualizar Node.js
+sudo npm uninstall -g @google/gemini-cli
+sudo npm install -g @google/gemini-cli@latest
+```
+
+Ver **TROUBLESHOOTING.md** para más detalles.
+
+El sistema ahora detecta automáticamente estos errores y reintenta con delays progresivos, pero **debes actualizar Node.js a versión 20+**.
 
 ### Los webhooks no llegan
 

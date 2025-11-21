@@ -76,11 +76,18 @@ app.listen(PORT, () => {
   // Verificar configuración de Gemini al iniciar
   (async () => {
     try {
-      const { verifyGeminiSetup } = await import('./src/services/gemini.js');
+      const { verifyGeminiSetup, getApiKeyInfo } = await import('./src/services/gemini.js');
       const status = await verifyGeminiSetup();
+      const apiKeyInfo = getApiKeyInfo();
       
       if (status.available) {
         console.log('✅ Gemini CLI configurado correctamente');
+        if (apiKeyInfo.totalKeys > 1) {
+          console.log(`   📋 API Keys: ${apiKeyInfo.totalKeys} configuradas (rotación automática habilitada)`);
+          console.log(`   🔄 Key actual: ${apiKeyInfo.currentKeyIndex + 1}/${apiKeyInfo.totalKeys}`);
+        } else {
+          console.log(`   📋 API Key: 1 configurada`);
+        }
       } else {
         console.warn('⚠️  Advertencia: Gemini CLI no está disponible');
         console.warn(`   ${status.error}`);
