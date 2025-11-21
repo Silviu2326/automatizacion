@@ -101,6 +101,32 @@ router.post('/prompts', async (req, res) => {
 });
 
 /**
+ * GET /api/jobs
+ * Obtiene todos los jobs (historial completo)
+ */
+router.get('/jobs', (req, res) => {
+  try {
+    const allJobs = promptQueue.getAllJobs();
+    
+    // Ordenar por fecha de creación (más recientes primero)
+    allJobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.json({
+      success: true,
+      jobs: allJobs,
+      total: allJobs.length
+    });
+  } catch (error) {
+    console.error('[API] Error en GET /api/jobs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/jobs/:jobId
  * Obtiene el estado y resultados de un job
  */

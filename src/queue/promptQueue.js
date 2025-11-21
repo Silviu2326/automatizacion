@@ -304,8 +304,15 @@ class PromptQueue {
     }
 
     // Si no hay nada procesando, empezar a procesar
+    // IMPORTANTE: Esperar un momento antes de procesar para asegurar que el guardado se complete
     if (!this.processing) {
-      this.processQueue();
+      // Usar setImmediate para asegurar que el guardado se complete antes de procesar
+      setImmediate(() => {
+        console.log(`[Queue] 🚀 Iniciando procesamiento de cola (${this.jobs.size} job(s) pendientes) [${this.instanceId}]`);
+        this.processQueue();
+      });
+    } else {
+      console.log(`[Queue] ⏳ Ya hay un procesador activo, job ${jobId} esperará en cola [${this.instanceId}]`);
     }
 
     return jobId;
@@ -318,6 +325,25 @@ class PromptQueue {
    */
   getJob(jobId) {
     return this.jobs.get(jobId) || null;
+  }
+
+  /**
+   * Obtiene todos los jobs (para mostrar historial)
+   * @returns {Array<Object>} - Array con todos los jobs
+   */
+  getAllJobs() {
+    return Array.from(this.jobs.values()).map(job => ({
+      jobId: job.jobId,
+      status: job.status,
+      total: job.total,
+      completed: job.completed,
+      failed: job.failed,
+      results: job.results || [],
+      projectId: job.projectId || null,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt || null,
+      completedAt: job.completedAt || null
+    }));
   }
 
   /**
@@ -451,9 +477,12 @@ class PromptQueue {
     job.status = 'completed';
     job.completedAt = new Date().toISOString();
     
+    console.log(`[Queue] 💾 Guardando job ${jobId} completado (${this.jobs.size} job(s) en Map) [${this.instanceId}]`);
+    
     // Guardar job completado
     this.saveJobs();
-
+    
+    console.log(`[Queue] ✅ Job ${jobId} guardado después de completarse [${this.instanceId}]`);
     console.log(`[Queue] Job ${jobId} completado. ${job.completed} exitosos, ${job.failed} fallidos`);
 
     // Enviar webhook final con el resumen

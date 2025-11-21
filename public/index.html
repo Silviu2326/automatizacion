@@ -886,7 +886,20 @@
                     await loadJob(data.jobId);
                     refreshJobs();
                 } else {
-                    showAlert(`Error: ${data.error || 'Error desconocido'}`, 'error');
+                    // Mostrar error con más detalles si están disponibles
+                    let errorMsg = data.error || 'Error desconocido';
+                    if (data.details) {
+                        errorMsg += `: ${data.details}`;
+                    }
+                    // Si es un error de Gemini CLI no disponible, dar más información
+                    if (data.error === 'Gemini CLI no está disponible' && data.details) {
+                        if (data.details.includes('GEMINI_API_KEY')) {
+                            errorMsg += '\n\nConfigura las variables de entorno GEMINI_API_KEY o GEMINI_API_KEYS en la VM';
+                        } else if (data.details.includes('instalado')) {
+                            errorMsg += '\n\nEjecuta en la VM: npm install -g @google/gemini-cli';
+                        }
+                    }
+                    showAlert(`Error: ${errorMsg}`, 'error');
                 }
             } catch (error) {
                 showAlert(`Error al enviar: ${error.message}`, 'error');
@@ -895,6 +908,27 @@
                 submitBtn.textContent = 'Enviar Prompts';
             }
         });
+
+        // Cargar todos los jobs
+        async function loadAllJobs() {
+            try {
+                const response = await fetch(`${API_URL}/jobs`);
+                const data = await response.json();
+                
+                if (data.success && data.jobs) {
+                    // Convertir array a objeto para mantener compatibilidad
+                    const jobsObj = {};
+                    data.jobs.forEach(job => {
+                        jobsObj[job.jobId] = job;
+                    });
+                    jobs = jobsObj;
+                    renderJobs();
+                    console.log(`✅ ${data.total} job(s) cargado(s) desde el servidor`);
+                }
+            } catch (error) {
+                console.error('Error cargando jobs:', error);
+            }
+        }
 
         // Cargar job individual
         async function loadJob(jobId) {
@@ -978,15 +1012,9 @@
 
         // Refrescar jobs
         async function refreshJobs() {
-            const jobIds = Object.keys(jobs);
-            
-            for (const jobId of jobIds) {
-                const job = jobs[jobId];
-                // Solo refrescar jobs que no estén completados
-                if (job.status !== 'completed') {
-                    await loadJob(jobId);
-                }
-            }
+            // Cargar todos los jobs desde el servidor para mantener sincronización
+            // Esto asegura que incluso después de reiniciar el servidor, se vean todos los jobs
+            await loadAllJobs();
         }
 
         // Actualizar lista de prompts cuando cambia el textarea
@@ -1008,6 +1036,7 @@
         // Inicializar
         checkServerStatus();
         loadProjects(); // Cargar proyectos al iniciar
+        loadAllJobs(); // Cargar todos los jobs al iniciar (incluye historial)
         setInterval(checkServerStatus, 30000); // Verificar estado cada 30 segundos
         
         // Refrescar jobs cada 2 segundos

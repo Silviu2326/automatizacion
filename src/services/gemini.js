@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import { env } from 'process';
 
@@ -181,27 +181,113 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
       console.log(`[Gemini] Ejecutando en directorio: ${projectDirectory}`);
     }
 
-    // Construir el comando con --yolo (necesario para ejecutar comandos)
-    // Si GEMINI_MODEL está configurado, usar ese modelo específico
-    let geminiCommand = 'gemini --yolo';
+    // Construir argumentos para gemini CLI
+    // Usar spawn con argumentos separados para evitar problemas con caracteres especiales
+    const geminiArgs = ['--yolo'];
     
     // Agregar modelo si está configurado en variables de entorno
     const geminiModel = env.GEMINI_MODEL;
     if (geminiModel && geminiModel.trim().length > 0) {
-      geminiCommand += ` --model ${geminiModel.trim()}`;
+      geminiArgs.push('--model', geminiModel.trim());
       console.log(`[Gemini] Usando modelo: ${geminiModel.trim()}`);
     }
     
-    geminiCommand += ` ${JSON.stringify(prompt)}`;
+    // Agregar el prompt como último argumento
+    // Usar spawn con argumentos separados para evitar problemas con caracteres especiales
+    geminiArgs.push(prompt);
     
-    // Ejecutar el comando con --yolo para que ejecute comandos y cree archivos
-    // Esto evita problemas con caracteres especiales en el prompt
+    // Ejecutar usando spawn con argumentos separados y shell: false
+    // Esto evita que el shell interprete caracteres especiales en el prompt
+    // Si gemini es un script npm, Node.js debería poder ejecutarlo de todas formas
     let stdout, stderr;
     try {
-      const result = await execAsync(
-        geminiCommand,
-        execOptions
-      );
+      const result = await new Promise((resolve, reject) => {
+        const child = spawn('gemini', geminiArgs, {
+          ...execOptions,
+          shell: false // No usar shell para evitar problemas con caracteres especiales
+        });
+        
+        let stdoutData = '';
+        let stderrData = '';
+        
+        child.stdout.on('data', (data) => {
+          stdoutData += data.toString();
+        });
+        
+        child.stderr.on('data', (data) => {
+          stderrData += data.toString();
+        });
+        
+        child.on('error', (error) => {
+          // Si el error es ENOENT, gemini puede ser un script npm que necesita shell
+          if (error.code === 'ENOENT') {
+            // Reintentar con shell: true usando un método más seguro
+            // Escapar el prompt correctamente para el shell usando comillas simples
+            // Reemplazar comillas simples dentro del prompt con una secuencia de escape
+            const promptEscaped = prompt.replace(/'/g, "'\"'\"'");
+            const commandParts = ['gemini', '--yolo'];
+            if (geminiModel && geminiModel.trim().length > 0) {
+              commandParts.push('--model', geminiModel.trim());
+            }
+            // Envolver el prompt en comillas simples para protegerlo del shell
+            commandParts.push(`'${promptEscaped}'`);
+            const commandString = commandParts.join(' ');
+            
+            const child2 = spawn(commandString, {
+              ...execOptions,
+              shell: true
+            });
+            
+            let stdoutData2 = '';
+            let stderrData2 = '';
+            
+            child2.stdout.on('data', (data) => {
+              stdoutData2 += data.toString();
+            });
+            
+            child2.stderr.on('data', (data) => {
+              stderrData2 += data.toString();
+            });
+            
+            child2.on('error', (error2) => {
+              reject(error2);
+            });
+            
+            child2.on('close', (code) => {
+              if (code === 0) {
+                resolve({
+                  stdout: stdoutData2,
+                  stderr: stderrData2
+                });
+              } else {
+                const error2 = new Error(`Command failed with exit code ${code}`);
+                error2.stdout = stdoutData2;
+                error2.stderr = stderrData2;
+                error2.code = code;
+                reject(error2);
+              }
+            });
+          } else {
+            reject(error);
+          }
+        });
+        
+        child.on('close', (code) => {
+          if (code === 0) {
+            resolve({
+              stdout: stdoutData,
+              stderr: stderrData
+            });
+          } else {
+            const error = new Error(`Command failed with exit code ${code}`);
+            error.stdout = stdoutData;
+            error.stderr = stderrData;
+            error.code = code;
+            reject(error);
+          }
+        });
+      });
+      
       stdout = result.stdout;
       stderr = result.stderr;
     } catch (execError) {
