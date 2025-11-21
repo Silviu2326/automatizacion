@@ -54,12 +54,18 @@ class PromptQueue {
       
       // Debug: mostrar qué jobs hay en memoria
       if (allJobs.length > 0) {
-        console.log(`[Queue] 🔍 Guardando: ${allJobs.length} job(s) en memoria`);
+        console.log(`[Queue] 🔍 Guardando: ${allJobs.length} job(s) en memoria [${this.instanceId}]`);
         allJobs.forEach(job => {
           console.log(`[Queue]   - Job ${job.jobId?.substring(0, 8)}... status: ${job.status}, createdAt: ${job.createdAt}`);
         });
       } else {
-        console.log(`[Queue] 🔍 Guardando: 0 job(s) en memoria (Map vacío)`);
+        // Solo loguear si realmente está vacío (no cada 30 segundos del auto-save)
+        const stackTrace = new Error().stack;
+        const isAutoSave = stackTrace.includes('setInterval') || stackTrace.includes('startAutoSave');
+        if (!isAutoSave) {
+          console.log(`[Queue] 🔍 Guardando: 0 job(s) en memoria (Map vacío) [${this.instanceId}]`);
+          console.log(`[Queue] ⚠️ Stack trace:`, stackTrace.split('\n').slice(1, 4).join('\n'));
+        }
       }
       
       const jobsArray = allJobs
@@ -262,24 +268,37 @@ class PromptQueue {
       completedAt: null
     };
 
+    // Agregar el job al Map
     this.jobs.set(jobId, job);
     
-    // Verificar que el job se agregó correctamente
+    // Verificar inmediatamente que el job se agregó correctamente
     const verifyJob = this.jobs.get(jobId);
+    const mapSize = this.jobs.size;
+    
     if (!verifyJob) {
       console.error(`[Queue] ❌ Error: Job ${jobId} no se pudo agregar al Map`);
       throw new Error(`No se pudo agregar el job al Map`);
     }
     
-    console.log(`[Queue] 📝 Job ${jobId} agregado correctamente (total: ${this.jobs.size} job(s))`);
+    console.log(`[Queue] 📝 Job ${jobId} agregado correctamente (total: ${mapSize} job(s)) [${this.instanceId}]`);
+    console.log(`[Queue] 🔍 Verificación: Map tiene ${this.jobs.size} job(s), job ${jobId} existe: ${this.jobs.has(jobId)}`);
     
     // Guardar inmediatamente al crear un job (sincrónicamente)
     // Verificar antes de guardar que el job está en el Map
-    if (this.jobs.has(jobId) && this.jobs.size > 0) {
-      console.log(`[Queue] 💾 Guardando job inmediatamente (${this.jobs.size} job(s) en Map)`);
+    const beforeSaveSize = this.jobs.size;
+    const beforeSaveHasJob = this.jobs.has(jobId);
+    
+    if (beforeSaveHasJob && beforeSaveSize > 0) {
+      console.log(`[Queue] 💾 Guardando job inmediatamente (${beforeSaveSize} job(s) en Map, job existe: ${beforeSaveHasJob}) [${this.instanceId}]`);
       this.saveJobs();
+      
+      // Verificar después de guardar
+      const afterSaveSize = this.jobs.size;
+      const afterSaveHasJob = this.jobs.has(jobId);
+      console.log(`[Queue] 🔍 Después de guardar: Map tiene ${afterSaveSize} job(s), job ${jobId} existe: ${afterSaveHasJob} [${this.instanceId}]`);
     } else {
       console.error(`[Queue] ❌ Error: Job no está en el Map o Map está vacío antes de guardar`);
+      console.error(`[Queue]   - Map size: ${beforeSaveSize}, has job: ${beforeSaveHasJob}`);
       // Intentar guardar de todas formas
       this.saveJobs();
     }
