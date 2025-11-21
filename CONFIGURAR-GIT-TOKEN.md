@@ -33,7 +33,7 @@ cd ~/automatizacion/projects/https-github-com-silviu2326-crmcompleto-git-1
 git remote -v
 
 # Actualizar la URL para incluir el token
-git remote set-url origin https://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@github.com/Silviu2326/crmcompleto.git
+git remote set-url origin https://TU_TOKEN@github.com/Silviu2326/crmcompleto.git
 
 # Reemplaza TU_TOKEN con tu token real (ej: ghp_xxxxxxxxxxxx)
 # Ejemplo:
