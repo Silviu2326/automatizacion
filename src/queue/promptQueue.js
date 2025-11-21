@@ -14,6 +14,9 @@ class PromptQueue {
     this.processing = false;
     this.jobsDir = join(process.cwd(), 'data');
     this.jobsFile = join(this.jobsDir, 'jobs.json');
+    this.instanceId = `Queue-${Date.now()}`; // ID único para esta instancia
+    
+    console.log(`[Queue] 🚀 Inicializando cola de jobs (instancia: ${this.instanceId})`);
     
     // Asegurar que el directorio existe
     this.ensureJobsDir();
@@ -48,7 +51,16 @@ class PromptQueue {
       const maxAge = 24 * 60 * 60 * 1000; // 24 horas
       
       const allJobs = Array.from(this.jobs.values());
-      console.log(`[Queue] 🔍 Guardando: ${allJobs.length} job(s) en memoria, estado: ${allJobs.map(j => j.status).join(', ')}`);
+      
+      // Debug: mostrar qué jobs hay en memoria
+      if (allJobs.length > 0) {
+        console.log(`[Queue] 🔍 Guardando: ${allJobs.length} job(s) en memoria`);
+        allJobs.forEach(job => {
+          console.log(`[Queue]   - Job ${job.jobId?.substring(0, 8)}... status: ${job.status}, createdAt: ${job.createdAt}`);
+        });
+      } else {
+        console.log(`[Queue] 🔍 Guardando: 0 job(s) en memoria (Map vacío)`);
+      }
       
       const jobsArray = allJobs
         .filter(job => {
@@ -91,10 +103,15 @@ class PromptQueue {
       writeFileSync(this.jobsFile, jobsJson, 'utf8');
       
       if (jobsArray.length > 0) {
-        console.log(`[Queue] ✅ ${jobsArray.length} job(s) guardado(s) en ${this.jobsFile} (${this.jobs.size} total en memoria)`);
+        console.log(`[Queue] ✅ ${jobsArray.length} job(s) guardado(s) en ${this.jobsFile} (${this.jobs.size} total en memoria) [${this.instanceId}]`);
       } else if (this.jobs.size > 0) {
         // Si hay jobs en memoria pero no se guardaron (filtrados por fecha), avisar
-        console.log(`[Queue] ⚠️ ${this.jobs.size} job(s) en memoria, pero todos antiguos (>24h, no guardados)`);
+        console.log(`[Queue] ⚠️ ${this.jobs.size} job(s) en memoria, pero todos antiguos (>24h, no guardados) [${this.instanceId}]`);
+      } else {
+        // Solo loguear si realmente no hay jobs (no cada 30 segundos)
+        if (allJobs.length === 0 && this.jobs.size === 0) {
+          // No loguear cada 30 segundos si está vacío, solo cuando hay cambios
+        }
       }
     } catch (error) {
       console.error('[Queue] ❌ Error guardando jobs:', error.message);
@@ -247,17 +264,25 @@ class PromptQueue {
 
     this.jobs.set(jobId, job);
     
-    console.log(`[Queue] 📝 Job ${jobId} agregado a la cola (${this.jobs.size} job(s) total)`);
+    // Verificar que el job se agregó correctamente
+    const verifyJob = this.jobs.get(jobId);
+    if (!verifyJob) {
+      console.error(`[Queue] ❌ Error: Job ${jobId} no se pudo agregar al Map`);
+      throw new Error(`No se pudo agregar el job al Map`);
+    }
     
-    // Guardar inmediatamente al crear un job
-    // Usar setImmediate para asegurar que el job esté completamente en el Map
-    setImmediate(() => {
-      if (this.jobs.has(jobId)) {
-        this.saveJobs();
-      } else {
-        console.warn(`[Queue] ⚠️ Job ${jobId} no encontrado en el Map al intentar guardar`);
-      }
-    });
+    console.log(`[Queue] 📝 Job ${jobId} agregado correctamente (total: ${this.jobs.size} job(s))`);
+    
+    // Guardar inmediatamente al crear un job (sincrónicamente)
+    // Verificar antes de guardar que el job está en el Map
+    if (this.jobs.has(jobId) && this.jobs.size > 0) {
+      console.log(`[Queue] 💾 Guardando job inmediatamente (${this.jobs.size} job(s) en Map)`);
+      this.saveJobs();
+    } else {
+      console.error(`[Queue] ❌ Error: Job no está en el Map o Map está vacío antes de guardar`);
+      // Intentar guardar de todas formas
+      this.saveJobs();
+    }
 
     // Si no hay nada procesando, empezar a procesar
     if (!this.processing) {
