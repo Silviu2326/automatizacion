@@ -145,9 +145,10 @@ function isQuotaError(errorMessage) {
  * @param {string} prompt - El prompt a ejecutar
  * @param {string} [projectDirectory] - Directorio del proyecto donde ejecutar (opcional)
  * @param {number} [retryAttempt] - Número de intento (para retry interno)
- * @returns {Promise<{success: boolean, output: string, error?: string, apiKeyIndex?: number}>}
+ * @param {number} [timeoutMs] - Timeout en milisegundos (default: 14 minutos = 840000ms)
+ * @returns {Promise<{success: boolean, output: string, error?: string, apiKeyIndex?: number, timeout?: boolean}>}
  */
-export async function executeGeminiPrompt(prompt, projectDirectory = null, retryAttempt = 0) {
+export async function executeGeminiPrompt(prompt, projectDirectory = null, retryAttempt = 0, timeoutMs = 14 * 60 * 1000) {
   // Verificar que hay al menos una API key configurada
   const currentApiKey = apiKeyManager.getCurrentKey();
   if (!currentApiKey) {
@@ -200,9 +201,31 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
     // Esto evita que el shell interprete caracteres especiales en el prompt
     // Si gemini es un script npm, Node.js debería poder ejecutarlo de todas formas
     let stdout, stderr;
+    let timeoutId = null;
+    let childProcess = null;
+    
     try {
       const result = await new Promise((resolve, reject) => {
-        const child = spawn('gemini', geminiArgs, {
+        // Crear timeout para cancelar después del tiempo límite
+        timeoutId = setTimeout(() => {
+          if (childProcess && !childProcess.killed) {
+            console.warn(`[Gemini] ⏱️ Timeout de ${timeoutMs / 1000 / 60} minutos alcanzado. Cancelando proceso...`);
+            childProcess.kill('SIGTERM');
+            // Dar un momento para que termine limpiamente, luego forzar
+            setTimeout(() => {
+              if (childProcess && !childProcess.killed) {
+                childProcess.kill('SIGKILL');
+              }
+            }, 2000);
+            
+            const timeoutError = new Error(`Timeout: El prompt excedió el tiempo límite de ${timeoutMs / 1000 / 60} minutos`);
+            timeoutError.timeout = true;
+            timeoutError.code = 'TIMEOUT';
+            reject(timeoutError);
+          }
+        }, timeoutMs);
+        
+        childProcess = spawn('gemini', geminiArgs, {
           ...execOptions,
           shell: false // No usar shell para evitar problemas con caracteres especiales
         });
@@ -210,15 +233,16 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
         let stdoutData = '';
         let stderrData = '';
         
-        child.stdout.on('data', (data) => {
+        childProcess.stdout.on('data', (data) => {
           stdoutData += data.toString();
         });
         
-        child.stderr.on('data', (data) => {
+        childProcess.stderr.on('data', (data) => {
           stderrData += data.toString();
         });
         
-        child.on('error', (error) => {
+        childProcess.on('error', (error) => {
+          if (timeoutId) clearTimeout(timeoutId);
           // Si el error es ENOENT, gemini puede ser un script npm que necesita shell
           if (error.code === 'ENOENT') {
             // Reintentar con shell: true usando un método más seguro
@@ -233,27 +257,48 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
             commandParts.push(`'${promptEscaped}'`);
             const commandString = commandParts.join(' ');
             
-            const child2 = spawn(commandString, {
+            childProcess = spawn(commandString, {
               ...execOptions,
               shell: true
             });
             
+            // Re-aplicar timeout al nuevo proceso
+            if (timeoutId) clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+              if (childProcess && !childProcess.killed) {
+                console.warn(`[Gemini] ⏱️ Timeout de ${timeoutMs / 1000 / 60} minutos alcanzado. Cancelando proceso...`);
+                childProcess.kill('SIGTERM');
+                setTimeout(() => {
+                  if (childProcess && !childProcess.killed) {
+                    childProcess.kill('SIGKILL');
+                  }
+                }, 2000);
+                
+                const timeoutError = new Error(`Timeout: El prompt excedió el tiempo límite de ${timeoutMs / 1000 / 60} minutos`);
+                timeoutError.timeout = true;
+                timeoutError.code = 'TIMEOUT';
+                reject(timeoutError);
+              }
+            }, timeoutMs);
+            
             let stdoutData2 = '';
             let stderrData2 = '';
             
-            child2.stdout.on('data', (data) => {
+            childProcess.stdout.on('data', (data) => {
               stdoutData2 += data.toString();
             });
             
-            child2.stderr.on('data', (data) => {
+            childProcess.stderr.on('data', (data) => {
               stderrData2 += data.toString();
             });
             
-            child2.on('error', (error2) => {
+            childProcess.on('error', (error2) => {
+              if (timeoutId) clearTimeout(timeoutId);
               reject(error2);
             });
             
-            child2.on('close', (code) => {
+            childProcess.on('close', (code) => {
+              if (timeoutId) clearTimeout(timeoutId);
               if (code === 0) {
                 resolve({
                   stdout: stdoutData2,
@@ -268,11 +313,13 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
               }
             });
           } else {
+            if (timeoutId) clearTimeout(timeoutId);
             reject(error);
           }
         });
         
-        child.on('close', (code) => {
+        childProcess.on('close', (code) => {
+          if (timeoutId) clearTimeout(timeoutId);
           if (code === 0) {
             resolve({
               stdout: stdoutData,
@@ -291,6 +338,14 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
       stdout = result.stdout;
       stderr = result.stderr;
     } catch (execError) {
+      // Limpiar timeout si aún está activo
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      // Si es un timeout, lanzarlo directamente
+      if (execError.timeout || execError.code === 'TIMEOUT') {
+        throw execError;
+      }
+      
       // Capturar tanto stdout como stderr del error para mejor diagnóstico
       stdout = execError.stdout || '';
       stderr = execError.stderr || '';
@@ -345,6 +400,21 @@ export async function executeGeminiPrompt(prompt, projectDirectory = null, retry
     const errorMessage = error.message || '';
     const errorStack = error.stack || '';
     const fullError = `${errorMessage}\n${errorStack}`;
+    
+    // Detectar timeout
+    const isTimeout = error.timeout || error.code === 'TIMEOUT' || errorMessage.includes('Timeout');
+    
+    // Si es timeout, retornar inmediatamente sin reintentar
+    if (isTimeout) {
+      console.error(`[Gemini] ⏱️ Timeout: El prompt excedió ${timeoutMs / 1000 / 60} minutos`);
+      return {
+        success: false,
+        output: '',
+        error: `Timeout: El prompt excedió el tiempo límite de ${timeoutMs / 1000 / 60} minutos`,
+        apiKeyIndex: currentKeyIndex,
+        timeout: true
+      };
+    }
     
     // Detectar diferentes tipos de errores
     const isQuotaErrorDetected = isQuotaError(fullError);

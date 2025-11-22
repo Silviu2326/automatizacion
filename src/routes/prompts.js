@@ -2,6 +2,8 @@ import express from 'express';
 import promptQueue from '../queue/promptQueue.js';
 import { verifyGeminiSetup, getApiKeyInfo } from '../services/gemini.js';
 import projectManager from '../services/projectManager.js';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 const router = express.Router();
 
@@ -167,6 +169,52 @@ router.get('/jobs/:jobId', (req, res) => {
   } catch (error) {
     console.error('[API] Error en GET /api/jobs/:jobId:', error);
     res.status(500).json({
+      error: 'Error interno del servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/jobs-review
+ * Obtiene todos los prompts que necesitan revisión (timeouts)
+ */
+router.get('/jobs-review', (req, res) => {
+  try {
+    const reviewFile = join(process.cwd(), 'data', 'jobs-review.json');
+    
+    if (!existsSync(reviewFile)) {
+      return res.json({
+        success: true,
+        reviews: [],
+        total: 0
+      });
+    }
+
+    const fileContent = readFileSync(reviewFile, 'utf8').trim();
+    
+    if (!fileContent || fileContent === '[]' || fileContent === '') {
+      return res.json({
+        success: true,
+        reviews: [],
+        total: 0
+      });
+    }
+
+    const reviews = JSON.parse(fileContent);
+    
+    // Ordenar por fecha de creación (más recientes primero)
+    reviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.json({
+      success: true,
+      reviews: reviews,
+      total: reviews.length
+    });
+  } catch (error) {
+    console.error('[API] Error en GET /api/jobs-review:', error);
+    res.status(500).json({
+      success: false,
       error: 'Error interno del servidor',
       message: error.message
     });

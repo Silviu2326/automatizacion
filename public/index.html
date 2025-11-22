@@ -425,6 +425,19 @@
                     </p>
                 </div>
             </div>
+
+            <!-- Jobs que necesitan revisión -->
+            <div class="card">
+                <h2>⏱️ Jobs que Necesitan Revisión (Timeouts)</h2>
+                <p style="color: #6b7280; font-size: 0.9em; margin-bottom: 15px;">
+                    Prompts que excedieron el tiempo límite de 14 minutos y fueron guardados para revisión manual
+                </p>
+                <div class="job-list" id="reviewList">
+                    <p style="color: #6b7280; text-align: center; padding: 20px;">
+                        Cargando...
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -930,6 +943,67 @@
             }
         }
 
+        // Cargar jobs que necesitan revisión
+        async function loadReviewJobs() {
+            try {
+                const response = await fetch(`${API_URL}/jobs-review`);
+                const data = await response.json();
+                
+                if (data.success && data.reviews) {
+                    renderReviewJobs(data.reviews);
+                    console.log(`✅ ${data.total} prompt(s) que necesitan revisión`);
+                }
+            } catch (error) {
+                console.error('Error cargando jobs de revisión:', error);
+                const reviewList = document.getElementById('reviewList');
+                reviewList.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 20px;">Error cargando jobs de revisión</p>';
+            }
+        }
+
+        // Renderizar jobs que necesitan revisión
+        function renderReviewJobs(reviews) {
+            const reviewList = document.getElementById('reviewList');
+            
+            if (!reviews || reviews.length === 0) {
+                reviewList.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">No hay prompts que necesiten revisión</p>';
+                return;
+            }
+            
+            reviewList.innerHTML = reviews.map(review => {
+                const createdAt = new Date(review.createdAt).toLocaleString('es-ES');
+                const jobCreatedAt = new Date(review.jobCreatedAt).toLocaleString('es-ES');
+                
+                return `
+                    <div class="job-item failed" style="border-left-color: #f59e0b;">
+                        <div class="job-header">
+                            <div>
+                                <div class="job-id">Job: ${review.jobId.substring(0, 8)}... | Prompt ${review.promptIndex + 1}/${review.totalPromptsInJob}</div>
+                                <div style="margin-top: 5px; font-weight: 600; color: #f59e0b;">⏱️ TIMEOUT</div>
+                                ${review.projectId ? `<div style="margin-top: 4px; font-size: 0.85em; color: #667eea;">📁 Proyecto: ${projects.find(p => p.id === review.projectId)?.name || review.projectId.substring(0, 8)}</div>` : ''}
+                                <div style="margin-top: 4px; font-size: 0.85em; color: #6b7280;">
+                                    Creado: ${jobCreatedAt} | Timeout: ${createdAt}
+                                </div>
+                            </div>
+                            <span class="job-status" style="background: #fef3c7; color: #92400e;">REVISIÓN</span>
+                        </div>
+                        <div style="margin-top: 10px; padding: 12px; background: #fef3c7; border-radius: 6px;">
+                            <div style="font-weight: 600; margin-bottom: 8px; color: #92400e;">Razón:</div>
+                            <div style="color: #78350f;">${review.reason}</div>
+                        </div>
+                        <div style="margin-top: 10px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                            <div style="font-weight: 600; margin-bottom: 8px;">Prompt:</div>
+                            <div style="color: #333; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-break: break-word;">
+                                ${review.prompt}
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 0.85em; color: #6b7280;">
+                            Completados antes del timeout: ${review.completedBeforeTimeout}/${review.totalPromptsInJob}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         // Cargar job individual
         async function loadJob(jobId) {
             try {
@@ -963,19 +1037,31 @@
                                    job.status === 'processing' ? 'processing' : 
                                    job.status === 'pending' ? 'pending' : 'failed';
                 
-                const detailsHtml = job.results && job.results.length > 0 ? job.results.map(result => `
-                    <div class="result-item ${result.status === 'failed' ? 'failed' : ''}">
+                const detailsHtml = job.results && job.results.length > 0 ? job.results.map(result => {
+                    const isTimeout = result.status === 'timeout' || result.timeout;
+                    const statusColor = result.status === 'completed' ? '#10b981' : isTimeout ? '#f59e0b' : '#ef4444';
+                    const statusIcon = result.status === 'completed' ? '✅' : isTimeout ? '⏱️' : '❌';
+                    const statusText = isTimeout ? 'TIMEOUT' : result.status.toUpperCase();
+                    
+                    return `
+                    <div class="result-item ${result.status === 'failed' || isTimeout ? 'failed' : ''}" style="${isTimeout ? 'border-left-color: #f59e0b;' : ''}">
                         <div class="result-prompt">${result.index + 1}. ${result.prompt.substring(0, 80)}${result.prompt.length > 80 ? '...' : ''}</div>
-                        <div class="result-status" style="font-size: 0.85em; color: ${result.status === 'completed' ? '#10b981' : '#ef4444'}; margin-top: 5px;">
-                            ${result.status === 'completed' ? '✅' : '❌'} ${result.status.toUpperCase()}
+                        <div class="result-status" style="font-size: 0.85em; color: ${statusColor}; margin-top: 5px;">
+                            ${statusIcon} ${statusText}${result.duration ? ` (${result.duration} min)` : ''}
                         </div>
                         ${result.output ? `
                             <div class="result-output">
                                 ${result.output.substring(0, 200)}${result.output.length > 200 ? '...' : ''}
                             </div>
                         ` : ''}
+                        ${result.error ? `
+                            <div class="result-output" style="background: #fee2e2; color: #991b1b;">
+                                ${result.error.substring(0, 200)}${result.error.length > 200 ? '...' : ''}
+                            </div>
+                        ` : ''}
                     </div>
-                `).join('') : '<p style="color: #6b7280;">Sin resultados aún</p>';
+                `;
+                }).join('') : '<p style="color: #6b7280;">Sin resultados aún</p>';
                 
                 return `
                     <div class="job-item ${statusClass}" onclick="toggleJobDetails('${job.jobId}')">
@@ -1015,6 +1101,7 @@
             // Cargar todos los jobs desde el servidor para mantener sincronización
             // Esto asegura que incluso después de reiniciar el servidor, se vean todos los jobs
             await loadAllJobs();
+            await loadReviewJobs();
         }
 
         // Actualizar lista de prompts cuando cambia el textarea
@@ -1037,6 +1124,7 @@
         checkServerStatus();
         loadProjects(); // Cargar proyectos al iniciar
         loadAllJobs(); // Cargar todos los jobs al iniciar (incluye historial)
+        loadReviewJobs(); // Cargar jobs que necesitan revisión
         setInterval(checkServerStatus, 30000); // Verificar estado cada 30 segundos
         
         // Refrescar jobs cada 2 segundos

@@ -14,9 +14,12 @@ class PromptQueue {
     this.processing = false;
     this.jobsDir = join(process.cwd(), 'data');
     this.jobsFile = join(this.jobsDir, 'jobs.json');
+    this.reviewFile = join(this.jobsDir, 'jobs-review.json'); // Archivo para jobs que necesitan revisión
     this.instanceId = `Queue-${Date.now()}`; // ID único para esta instancia
+    this.TIMEOUT_MS = 14 * 60 * 1000; // 14 minutos en milisegundos
     
     console.log(`[Queue] 🚀 Inicializando cola de jobs (instancia: ${this.instanceId})`);
+    console.log(`[Queue] ⏱️ Timeout por tarea: ${this.TIMEOUT_MS / 1000 / 60} minutos`);
     
     // Asegurar que el directorio existe
     this.ensureJobsDir();
@@ -399,12 +402,58 @@ class PromptQueue {
     // Procesar cada prompt secuencialmente
     for (let i = 0; i < job.prompts.length; i++) {
       const prompt = job.prompts[i];
+      const promptStartTime = Date.now();
       
-      console.log(`[Queue] Ejecutando prompt ${i + 1}/${job.total} del job ${jobId}`);
+      console.log(`[Queue] Ejecutando prompt ${i + 1}/${job.total} del job ${jobId} (timeout: ${this.TIMEOUT_MS / 1000 / 60} min)`);
 
       try {
         // Ejecutar el prompt con Gemini en el directorio del proyecto si existe
-        const result = await executeGeminiPrompt(prompt, job.projectDirectory);
+        // Pasar el timeout de 14 minutos
+        const result = await executeGeminiPrompt(prompt, job.projectDirectory, 0, this.TIMEOUT_MS);
+        
+        const promptDuration = ((Date.now() - promptStartTime) / 1000 / 60).toFixed(2);
+        console.log(`[Queue] ✅ Prompt ${i + 1}/${job.total} completado en ${promptDuration} minutos`);
+
+        // Verificar si fue un timeout
+        if (result.timeout) {
+          console.warn(`[Queue] ⏱️ Prompt ${i + 1}/${job.total} excedió el timeout de ${this.TIMEOUT_MS / 1000 / 60} minutos`);
+          
+          // Guardar en archivo de revisión
+          this.savePromptForReview(job, prompt, i);
+          
+          const promptResult = {
+            prompt,
+            status: 'timeout',
+            output: '',
+            error: result.error || `Timeout: El prompt excedió el tiempo límite de ${this.TIMEOUT_MS / 1000 / 60} minutos`,
+            timestamp: new Date().toISOString(),
+            index: i,
+            timeout: true,
+            duration: promptDuration
+          };
+
+          job.results.push(promptResult);
+          job.failed++;
+          
+          // Guardar progreso después del timeout
+          this.saveJobs();
+
+          // Enviar webhook de timeout
+          try {
+            await notifyPromptCompleted(
+              job.webhookUrl,
+              jobId,
+              prompt,
+              { success: false, output: '', error: result.error, timeout: true },
+              job.webhookSecret
+            );
+          } catch (webhookError) {
+            console.error(`[Queue] Error enviando webhook de timeout:`, webhookError);
+          }
+          
+          // Continuar con el siguiente prompt (no lanzar error)
+          continue;
+        }
 
         const promptResult = {
           prompt,
@@ -412,7 +461,8 @@ class PromptQueue {
           output: result.output,
           error: result.error,
           timestamp: new Date().toISOString(),
-          index: i
+          index: i,
+          duration: ((Date.now() - promptStartTime) / 1000 / 60).toFixed(2)
         };
 
         job.results.push(promptResult);
@@ -441,15 +491,28 @@ class PromptQueue {
         }
 
       } catch (error) {
-        console.error(`[Queue] Error procesando prompt ${i + 1}:`, error);
+        const promptDuration = ((Date.now() - promptStartTime) / 1000 / 60).toFixed(2);
+        console.error(`[Queue] Error procesando prompt ${i + 1} (duración: ${promptDuration} min):`, error);
+
+        // Verificar si el error es un timeout
+        const isTimeout = error.timeout || error.code === 'TIMEOUT' || error.message?.includes('Timeout');
+        
+        if (isTimeout) {
+          console.warn(`[Queue] ⏱️ Prompt ${i + 1}/${job.total} excedió el timeout (capturado en catch)`);
+          
+          // Guardar en archivo de revisión
+          this.savePromptForReview(job, prompt, i);
+        }
 
         const promptResult = {
           prompt,
-          status: 'failed',
+          status: isTimeout ? 'timeout' : 'failed',
           output: '',
           error: error.message || 'Error desconocido',
           timestamp: new Date().toISOString(),
-          index: i
+          index: i,
+          timeout: isTimeout,
+          duration: promptDuration
         };
 
         job.results.push(promptResult);
@@ -464,12 +527,15 @@ class PromptQueue {
             job.webhookUrl,
             jobId,
             prompt,
-            { success: false, output: '', error: error.message },
+            { success: false, output: '', error: error.message, timeout: isTimeout },
             job.webhookSecret
           );
         } catch (webhookError) {
           console.error(`[Queue] Error enviando webhook de error:`, webhookError);
         }
+        
+        // Continuar con el siguiente prompt (no lanzar error para no detener el job)
+        // Solo loguear y continuar
       }
     }
 
@@ -503,6 +569,60 @@ class PromptQueue {
     }
 
     // El job queda en el Map para consulta posterior, pero ya no se procesa
+  }
+
+  /**
+   * Guarda un prompt que necesita revisión (por timeout) en el archivo de revisión
+   * @param {Object} job - El job completo
+   * @param {string} prompt - El prompt que falló por timeout
+   * @param {number} index - Índice del prompt en el array
+   */
+  savePromptForReview(job, prompt, index) {
+    try {
+      let reviewJobs = [];
+      
+      // Cargar jobs existentes si el archivo existe
+      if (existsSync(this.reviewFile)) {
+        const fileContent = readFileSync(this.reviewFile, 'utf8').trim();
+        if (fileContent && fileContent !== '[]' && fileContent !== '') {
+          reviewJobs = JSON.parse(fileContent);
+        }
+      }
+      
+      // Crear entrada de revisión
+      const reviewEntry = {
+        jobId: job.jobId,
+        prompt: prompt,
+        promptIndex: index,
+        projectId: job.projectId || null,
+        projectDirectory: job.projectDirectory || null,
+        webhookUrl: job.webhookUrl,
+        status: 'timeout',
+        reason: `Timeout: El prompt excedió el tiempo límite de ${this.TIMEOUT_MS / 1000 / 60} minutos`,
+        createdAt: new Date().toISOString(),
+        jobCreatedAt: job.createdAt,
+        totalPromptsInJob: job.total,
+        completedBeforeTimeout: job.completed || 0
+      };
+      
+      // Agregar a la lista (evitar duplicados)
+      const exists = reviewJobs.some(
+        entry => entry.jobId === reviewEntry.jobId && entry.promptIndex === reviewEntry.promptIndex
+      );
+      
+      if (!exists) {
+        reviewJobs.push(reviewEntry);
+        
+        // Guardar en el archivo
+        const reviewJson = JSON.stringify(reviewJobs, null, 2);
+        writeFileSync(this.reviewFile, reviewJson, 'utf8');
+        
+        console.log(`[Queue] 📋 Prompt guardado para revisión en ${this.reviewFile}`);
+        console.log(`[Queue]   Job: ${job.jobId.substring(0, 8)}..., Prompt ${index + 1}/${job.total}`);
+      }
+    } catch (error) {
+      console.error('[Queue] ❌ Error guardando prompt para revisión:', error);
+    }
   }
 
   /**
